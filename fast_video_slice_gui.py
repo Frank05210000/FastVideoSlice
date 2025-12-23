@@ -41,10 +41,12 @@ class Worker(QtCore.QThread):
             fvs.check_files(self.video, self.subs)
             parsed_ranges = [fvs.parse_range(r) for r in self.ranges]
             fvs.ensure_outdir(self.outdir)
-            fvs.ensure_ffmpeg_exists()
+            ffmpeg_cmd, ffprobe_cmd = fvs.ensure_ffmpeg_exists()
             cues = fvs.read_srt(self.subs)
             video_duration = (
-                fvs.probe_duration(self.video) if self.check_duration else None
+                fvs.probe_duration(self.video, ffprobe_cmd)
+                if self.check_duration
+                else None
             )
             if video_duration is not None:
                 for rng in parsed_ranges:
@@ -52,13 +54,22 @@ class Worker(QtCore.QThread):
                         raise fvs.UserError(
                             f"區間超出影片長度（影片約 {video_duration:.2f} 秒）: {rng.label}"
                         )
+            # 檢查標題重複
+            seen_titles = set()
+            for rng in parsed_ranges:
+                if rng.safe_title:
+                    if rng.safe_title in seen_titles:
+                        raise fvs.UserError(f"標題重複：{rng.title}")
+                    seen_titles.add(rng.safe_title)
+
             for idx, rng in enumerate(parsed_ranges, start=1):
-                base = f"clip_{idx:03d}"
+                # 優先使用標題作為檔名
+                base = rng.safe_title if rng.safe_title else f"clip_{idx:03d}"
                 video_out = self.outdir / f"{base}.mp4"
                 subs_out = self.outdir / f"{base}.srt"
                 if self.verbose:
                     print(f"[處理] {rng.label} -> {video_out.name}")
-                fvs.run_ffmpeg(self.video, rng, video_out, self.verbose)
+                fvs.run_ffmpeg(self.video, rng, video_out, self.verbose, ffmpeg_cmd)
                 sliced_cues = fvs.slice_cues(cues, rng)
                 fvs.write_srt(subs_out, sliced_cues)
             self.finished.emit("完成")
@@ -83,11 +94,18 @@ class MainWindow(QtWidgets.QWidget):
         self.subs_edit = self._add_path_row(layout, "字幕檔 (.srt)", True)
         self.outdir_edit = self._add_path_row(layout, "輸出資料夾", False, default="clips")
 
-        layout.addWidget(QtWidgets.QLabel("時間區間（每行一段，格式 HH:MM:SS -> HH:MM:SS）"))
+        range_label = QtWidgets.QLabel("時間區間（每行一段，格式：標題,HH:MM:SS -> HH:MM:SS 或 HH:MM:SS -> HH:MM:SS）")
+        layout.addWidget(range_label)
         self.range_edit = QtWidgets.QPlainTextEdit()
-        self.range_edit.setPlaceholderText("例如：\n00:01:10 -> 00:01:45\n00:05:00->00:05:15")
+        self.range_edit.setPlaceholderText("例如：\n精華一,00:01:10 -> 00:01:45\n精華二,00:05:00 -> 00:05:15\n00:10:00 -> 00:10:30")
         self.range_edit.setMinimumHeight(100)
         layout.addWidget(self.range_edit)
+
+        # 提示詞樣式按鈕
+        prompt_btn = QtWidgets.QPushButton("📋 複製 AI 提示詞樣式")
+        prompt_btn.setToolTip("複製區間格式範本，可貼給 AI 產生區間列表")
+        prompt_btn.clicked.connect(self._copy_prompt_template)
+        layout.addWidget(prompt_btn)
 
         opts_layout = QtWidgets.QHBoxLayout()
         self.check_duration_cb = QtWidgets.QCheckBox("檢查影片長度")
@@ -164,6 +182,24 @@ class MainWindow(QtWidgets.QWidget):
         QtWidgets.QMessageBox.critical(self, "錯誤", msg)
         self.run_btn.setEnabled(True)
         self.worker = None
+
+    def _copy_prompt_template(self) -> None:
+        """複製 AI 提示詞樣式到剪貼簿"""
+        template = """請依照以下格式輸出影片裁切區間，每行一段：
+標題,HH:MM:SS -> HH:MM:SS
+
+規則：
+- 標題需唯一（不可重複）
+- 標題會用於輸出檔名，非法字元會轉為底線
+- 若不需標題可省略：HH:MM:SS -> HH:MM:SS
+
+範例：
+精華片段一,00:01:10 -> 00:01:45
+重點說明,00:05:00 -> 00:05:30
+結尾彩蛋,00:10:00 -> 00:10:20"""
+        clipboard = QtWidgets.QApplication.clipboard()
+        clipboard.setText(template)
+        QtWidgets.QMessageBox.information(self, "已複製", "AI 提示詞樣式已複製到剪貼簿")
 
 
 def main() -> None:

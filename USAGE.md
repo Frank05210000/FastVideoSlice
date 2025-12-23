@@ -14,7 +14,9 @@ python3 fast_video_slice.py --help
 ## 參數
 - `--video <path>`：來源影片檔（必填）
 - `--subs <path>`：來源字幕檔 `.srt`（必填）
-- `--range "HH:MM:SS -> HH:MM:SS"`：時間區間，至少一個，可多次提供
+- `--range "HH:MM:SS -> HH:MM:SS"`：時間區間，至少一個，可多次提供。
+  - 可加上自訂標題：`"影片標題,HH:MM:SS -> HH:MM:SS"`，輸出檔名將使用標題。
+  - 標題經過檔名安全清理（非法字元改為 `_`，空白改 `_`），若重複或清理後重複會報錯。
 - `--outdir <path>`：輸出資料夾，預設 `clips`（不存在會自動建立）
 - `--check-duration`：先用 ffprobe 讀影片長度，若區間超界則報錯
 - `--verbose`：顯示處理細節與 ffmpeg 命令
@@ -24,8 +26,8 @@ python3 fast_video_slice.py --help
 python3 fast_video_slice.py \
   --video input.mp4 \
   --subs input.srt \
-  --range "00:01:10 -> 00:01:45" \
-  --range "00:05:00->00:05:15" \
+  --range "精華一,00:01:10 -> 00:01:45" \
+  --range "精華二,00:05:00->00:05:15" \
   --outdir clips \
   --check-duration \
   --verbose
@@ -33,9 +35,9 @@ python3 fast_video_slice.py \
 
 ## 輸出
 - 每個區間輸出：
-  - `clip_001.mp4`（ffmpeg `-ss/-to -c copy` 快速裁切）
-  - `clip_001.srt`（字幕時間裁切到區間、時間軸從 00:00:00、序號重排）
-- 檔名序號依輸入區間順序。
+  - 若有標題，使用清理後的標題作為檔名，例如 `精華一.mp4`、`精華一.srt`
+  - 若無標題，使用序號 `clip_001.mp4`、`clip_001.srt`
+  - ffmpeg `-ss/-to -c copy` 快速裁切；字幕時間裁切到區間、時間軸從 00:00:00、序號重排
 
 ## 驗證與錯誤訊息
 - 檢查：檔案存在/型別、字幕副檔名、時間格式 `HH:MM:SS`、`start < end`、（選）區間不超出影片長度。

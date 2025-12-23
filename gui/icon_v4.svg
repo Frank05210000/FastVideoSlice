@@ -1,0 +1,43 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background: Midnight Blue Gradient -->
+    <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#bg_gradient_a)" />
+    
+    <defs>
+        <linearGradient id="bg_gradient_a" x1="50" y1="50" x2="974" y2="974" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#000428" /> <!-- Midnight Blue -->
+            <stop offset="1" stop-color="#004e92" /> <!-- Lighter Blue -->
+        </linearGradient>
+        
+        <linearGradient id="bolt_gradient" x1="400" y1="200" x2="600" y2="800" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#FFF700" /> <!-- Yellow -->
+            <stop offset="1" stop-color="#FF8C00" /> <!-- Orange -->
+        </linearGradient>
+
+        <filter id="glow_a" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- Film Strip (Slanted for speed) -->
+    <g transform="translate(512, 512) rotate(-15) translate(-512, -512)">
+        <rect x="212" y="312" width="600" height="400" rx="20" fill="#1A1A1A" stroke="#333" stroke-width="5"/>
+        <!-- Sprocket Holes Top -->
+        <path d="M240 340 H290 V390 H240 Z M340 340 H390 V390 H340 Z M440 340 H490 V390 H440 Z M540 340 H590 V390 H540 Z M640 340 H690 V390 H640 Z M740 340 H790 V390 H740 Z" fill="#555"/>
+        <!-- Sprocket Holes Bottom -->
+        <path d="M240 634 H290 V684 H240 Z M340 634 H390 V684 H340 Z M440 634 H490 V684 H440 Z M540 634 H590 V684 H540 Z M640 634 H690 V684 H640 Z M740 634 H790 V684 H740 Z" fill="#555"/>
+        
+        <!-- Play Symbol in center (Subtle) -->
+        <path d="M450 450 L600 512 L450 574 Z" fill="#333"/>
+    </g>
+
+    <!-- The Lightning Slice -->
+    <g filter="url(#glow_a)">
+        <!-- A lightning bolt shape cutting through -->
+        <path d="M620 150 L500 450 L600 450 L440 850 L560 550 L460 550 L620 150 Z" fill="url(#bolt_gradient)" stroke="white" stroke-width="5"/>
+    </g>
+
+</svg>

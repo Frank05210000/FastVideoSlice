@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- macOS Style Squircle Background -->
+    <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#paint0_linear)" />
+    
+    <!-- Shadow for depth -->
+    <filter id="dropShadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="10" stdDeviation="20" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Main Icon: Fast Forward Chevrons with a Slice -->
+    <g filter="url(#dropShadow)">
+        <!-- First Chevron (Left) -->
+        <path d="M300 262 L500 512 L300 762 L420 762 L620 512 L420 262 Z" fill="white"/>
+        
+        <!-- Second Chevron (Right) -->
+        <path d="M540 262 L740 512 L540 762 L660 762 L860 512 L660 262 Z" fill="white"/>
+        
+        <!-- The Slice (Masking effect using a path to cut through) -->
+        <!-- A diagonal cut from bottom-left to top-right -->
+        <path d="M250 800 L800 200 L850 200 L300 800 Z" fill="url(#paint0_linear)"/>
+    </g>
+
+    <!-- Gradient Definition -->
+    <defs>
+        <linearGradient id="paint0_linear" x1="50" y1="50" x2="974" y2="974" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#005C97" /> <!-- Deep Blue -->
+            <stop offset="1" stop-color="#363795" /> <!-- Purple-ish Blue -->
+        </linearGradient>
+    </defs>
+</svg>

@@ -26,6 +26,7 @@
 	•	使用者可輸入一段或多段時間區間
 	•	每段區間格式：
 	•	HH:MM:SS -> HH:MM:SS
+	•	可加標題：影片標題,HH:MM:SS -> HH:MM:SS（標題將用於輸出檔名，需檢查重名）
 	•	例：00:01:10 -> 00:01:45
 	•	一次輸入多段時，區間順序即為輸出序號順序
 
@@ -47,8 +48,8 @@
 3.5 多段輸出策略
 	•	多段輸入 → 多支輸出
 	•	每段產出：
-	•	clip_XXX.mp4
-	•	clip_XXX.srt
+	•	預設：clip_XXX.mp4 / clip_XXX.srt
+	•	若提供標題，檔名使用標題（經檔名安全清理），需避免重名
 
 ⸻
 
@@ -140,3 +141,8 @@
 	4.	錯誤輸入
 	•	00:10:00 -> 00:09:00 必須報錯
 	•	影片/字幕路徑錯誤必須報錯
+
+
+打包指令：
+MODE=onefile pyinstaller gui/__main__.py --noconsole --onefile --name FastVideoSliceGUI \
+  --icon gui/icon.icns --hidden-import sip --add-binary "bin/ffmpeg:bin" --add-binary "bin/ffprobe:bin"

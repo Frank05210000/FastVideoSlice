@@ -1,0 +1,42 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background: Modern Deep Blue Gradient -->
+    <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#bg_gradient_c)" />
+    
+    <defs>
+        <linearGradient id="bg_gradient_c" x1="50" y1="50" x2="974" y2="974" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#0F2027" /> <!-- Deep Dark Blue -->
+            <stop offset="0.5" stop-color="#203A43" />
+            <stop offset="1" stop-color="#2C5364" />
+        </linearGradient>
+        
+        <filter id="shadow_c" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#000" flood-opacity="0.4"/>
+        </filter>
+    </defs>
+
+    <!-- Main Timer Ring (The "Whole" Video) -->
+    <g transform="translate(512, 512)">
+        <!-- Gray/Blue Track -->
+        <circle cx="0" cy="0" r="300" stroke="#4A6D7C" stroke-width="60" fill="none" opacity="0.5"/>
+        
+        <!-- Progress/Remaining part (Cyan) -->
+        <!-- Arc from -90deg to 270deg, leaving a gap for the slice -->
+        <!-- Simplified visual: A large arc representing the full video timeline -->
+        <path d="M0 -300 A 300 300 0 1 1 -212.13 212.13" stroke="#00D2FF" stroke-width="60" stroke-linecap="round" fill="none"/>
+    </g>
+
+    <!-- The "Slice" (Extracted Segment) -->
+    <!-- A wedge pulled out slightly from the center -->
+    <g transform="translate(540, 540)" filter="url(#shadow_c)">
+        <!-- Wedge Shape: Center to edge arc -->
+        <!-- Angle approx 135 to 180 degrees (bottom right) -->
+        <path d="M0 0 L212.13 212.13 A 300 300 0 0 0 300 0 Z" fill="#FF4B2B" />
+        
+        <!-- Play Icon inside the slice -->
+        <path d="M180 80 L240 120 L180 160 Z" fill="white" transform="rotate(22.5, 0, 0)"/>
+    </g>
+    
+    <!-- Center Hub -->
+    <circle cx="512" cy="512" r="40" fill="#FFF" opacity="0.2"/>
+
+</svg>

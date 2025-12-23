@@ -1,0 +1,47 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background: Midnight Blue Gradient -->
+    <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#bg_gradient_a_clean)" />
+    
+    <defs>
+        <linearGradient id="bg_gradient_a_clean" x1="50" y1="50" x2="974" y2="974" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#000428" /> <!-- Midnight Blue -->
+            <stop offset="1" stop-color="#004e92" /> <!-- Lighter Blue -->
+        </linearGradient>
+        
+        <linearGradient id="beam_gradient" x1="200" y1="800" x2="800" y2="200" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#FFD700" /> <!-- Gold -->
+            <stop offset="0.5" stop-color="#FFF" /> <!-- White Hot Center -->
+            <stop offset="1" stop-color="#FF8C00" /> <!-- Orange -->
+        </linearGradient>
+
+        <filter id="glow_beam" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="10" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- Film Strip (Slanted for speed) -->
+    <g transform="translate(512, 512) rotate(-15) translate(-512, -512)">
+        <rect x="212" y="312" width="600" height="400" rx="20" fill="#1A1A1A" stroke="#333" stroke-width="5"/>
+        <!-- Sprocket Holes Top -->
+        <path d="M240 340 H290 V390 H240 Z M340 340 H390 V390 H340 Z M440 340 H490 V390 H440 Z M540 340 H590 V390 H540 Z M640 340 H690 V390 H640 Z M740 340 H790 V390 H740 Z" fill="#555"/>
+        <!-- Sprocket Holes Bottom -->
+        <path d="M240 634 H290 V684 H240 Z M340 634 H390 V684 H340 Z M440 634 H490 V684 H440 Z M540 634 H590 V684 H540 Z M640 634 H690 V684 H640 Z M740 634 H790 V684 H740 Z" fill="#555"/>
+        
+        <!-- Play Symbol in center (Subtle) -->
+        <path d="M450 450 L600 512 L450 574 Z" fill="#333"/>
+    </g>
+
+    <!-- The Clean Slice (Laser Beam) -->
+    <g filter="url(#glow_beam)">
+        <!-- A sharp diagonal slash -->
+        <path d="M250 850 L800 150 L820 150 L270 850 Z" fill="url(#beam_gradient)" />
+        <!-- Speed lines to emphasize the cut motion -->
+        <path d="M200 800 L300 680" stroke="white" stroke-width="5" stroke-opacity="0.5" stroke-linecap="round"/>
+        <path d="M700 300 L800 180" stroke="white" stroke-width="5" stroke-opacity="0.5" stroke-linecap="round"/>
+    </g>
+
+</svg>

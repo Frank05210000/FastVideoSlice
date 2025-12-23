@@ -1,0 +1,55 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background: Dark Metallic Gradient -->
+    <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#bg_gradient)" />
+    
+    <defs>
+        <linearGradient id="bg_gradient" x1="50" y1="50" x2="974" y2="974" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#232526" /> <!-- Black/Grey -->
+            <stop offset="1" stop-color="#414345" />
+        </linearGradient>
+        <linearGradient id="metal_gradient" x1="0" y1="0" x2="1" y2="1">
+            <stop stop-color="#FFFFFF" />
+            <stop offset="1" stop-color="#999999" />
+        </linearGradient>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="10" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- Film Strip Background -->
+    <g transform="translate(0, 50)">
+        <!-- Main Strip -->
+        <rect x="112" y="362" width="800" height="200" rx="15" fill="#111" stroke="#333" stroke-width="4"/>
+        
+        <!-- Sprocket Holes (Top) -->
+        <path d="M140 380 H180 V410 H140 Z M220 380 H260 V410 H220 Z M300 380 H340 V410 H300 Z M380 380 H420 V410 H380 Z M460 380 H500 V410 H460 Z M540 380 H580 V410 H540 Z M620 380 H660 V410 H620 Z M700 380 H740 V410 H700 Z M780 380 H820 V410 H780 Z M860 380 H900 V410 H860 Z" fill="#444"/>
+        
+        <!-- Sprocket Holes (Bottom) -->
+        <path d="M140 512 H180 V542 H140 Z M220 512 H260 V542 H220 Z M300 512 H340 V542 H300 Z M380 512 H420 V542 H380 Z M460 512 H500 V542 H460 Z M540 512 H580 V542 H540 Z M620 512 H660 V542 H620 Z M700 512 H740 V542 H700 Z M780 512 H820 V542 H780 Z M860 512 H900 V542 H860 Z" fill="#444"/>
+    </g>
+
+    <!-- Highlighted Segment (The Cut) - Glowing Teal -->
+    <g transform="translate(0, 50)" filter="url(#glow)">
+        <rect x="360" y="352" width="304" height="220" rx="15" fill="none" stroke="#00E5FF" stroke-width="12"/>
+    </g>
+
+    <!-- Scissors (Stylized) -->
+    <g transform="translate(512, 512)">
+        <!-- Blade 1 (Top-Left to Bottom-Right) -->
+        <path d="M-160 -180 L160 180 L190 150 L-130 -210 Z" fill="url(#metal_gradient)"/>
+        <!-- Handle 1 -->
+        <circle cx="180" cy="200" r="50" stroke="url(#metal_gradient)" stroke-width="20" fill="none"/>
+
+        <!-- Blade 2 (Top-Right to Bottom-Left) -->
+        <path d="M160 -180 L-160 180 L-190 150 L130 -210 Z" fill="url(#metal_gradient)"/>
+        <!-- Handle 2 -->
+        <circle cx="-180" cy="200" r="50" stroke="url(#metal_gradient)" stroke-width="20" fill="none"/>
+        
+        <!-- Pivot Point -->
+        <circle cx="0" cy="0" r="18" fill="#333" stroke="#666" stroke-width="2"/>
+    </g>
+</svg>
