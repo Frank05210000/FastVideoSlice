@@ -34,6 +34,9 @@ class SliceWorker(QThread):
         check_duration: bool,
         verbose: bool,
         append_time: bool = False,
+        subs_overrides: List[str | None] | None = None,
+        precise_flags: List[bool] | None = None,
+        use_hwaccel: bool = True,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -44,6 +47,9 @@ class SliceWorker(QThread):
         self.check_duration = check_duration
         self.verbose = verbose
         self.append_time = append_time
+        self.subs_overrides = subs_overrides or []
+        self.precise_flags = precise_flags or []
+        self.use_hwaccel = use_hwaccel
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -117,8 +123,8 @@ class SliceWorker(QThread):
                 elif self.append_time:
                     # 將時間轉為檔名安全格式
                     time_parts = rng.label.split("->")
-                    start_str = time_parts[0].strip().replace(":", "-")
-                    end_str = time_parts[1].strip().replace(":", "-") if len(time_parts) > 1 else ""
+                    start_str = time_parts[0].strip().replace(":", "-").replace(".", "-")
+                    end_str = time_parts[1].strip().replace(":", "-").replace(".", "-") if len(time_parts) > 1 else ""
                     base = f"clip_{idx:03d}__{start_str}__{end_str}"
                 else:
                     base = f"clip_{idx:03d}"
@@ -134,11 +140,33 @@ class SliceWorker(QThread):
                     video_out.unlink()
 
                 # 裁切影片
-                fvs.run_ffmpeg(self.video, rng, video_out, self.verbose, ffmpeg_cmd)
+                use_precise = (
+                    self.precise_flags[idx - 1]
+                    if idx - 1 < len(self.precise_flags)
+                    else self.ranges[idx - 1].get("precise", False)
+                )
+                if use_precise and self.verbose:
+                    mode = "硬體加速" if self.use_hwaccel else "CPU"
+                    self.log.emit(f"  使用精準輸出（重編碼，{mode}）")
+                if use_precise:
+                    fvs.run_ffmpeg_precise(
+                        self.video,
+                        rng,
+                        video_out,
+                        self.verbose,
+                        ffmpeg_cmd,
+                        use_hwaccel=self.use_hwaccel,
+                    )
+                else:
+                    fvs.run_ffmpeg(self.video, rng, video_out, self.verbose, ffmpeg_cmd)
 
                 # 裁切字幕
-                sliced_cues = fvs.slice_cues(cues, rng)
-                fvs.write_srt(subs_out, sliced_cues)
+                override_text = self.subs_overrides[idx - 1] if idx - 1 < len(self.subs_overrides) else None
+                if override_text:
+                    subs_out.write_text(override_text.strip() + "\n", encoding="utf-8")
+                else:
+                    sliced_cues = fvs.slice_cues(cues, rng)
+                    fvs.write_srt(subs_out, sliced_cues)
 
                 output_files.append(str(video_out))
                 output_files.append(str(subs_out))

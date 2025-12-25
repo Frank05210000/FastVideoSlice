@@ -1,0 +1,4 @@
+# Core is standard library; CLI無需額外套件
+
+# GUI 需要 PyQt5
+PyQt5>=5.15,<6

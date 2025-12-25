@@ -18,6 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
+# 預設用於解讀小數部分為「影格」的 fps；例如 00:00:01.15 在 30fps 下代表第 15 格。
+DEFAULT_FPS = 30
+
 
 @dataclass
 class TimeRange:
@@ -39,14 +42,33 @@ class UserError(Exception):
     """User-facing errors with friendly messages."""
 
 
-def parse_hms(text: str) -> float:
-    match = re.fullmatch(r"(\d{2}):(\d{2}):(\d{2})", text.strip())
+def parse_hms(text: str, fps: int = DEFAULT_FPS) -> float:
+    """
+    解析時間字串，支援：
+    - HH:MM:SS
+    - HH:MM:SS.ff  （ff 代表影格，預設 fps=30，範圍 0~fps-1）
+    - HH:MM:SS.mmm （維持向後相容的毫秒格式）
+    """
+    match = re.fullmatch(r"(\d{2}):(\d{2}):(\d{2})(?:[.:](\d{1,3}))?", text.strip())
     if not match:
-        raise UserError("時間格式錯誤，需為 HH:MM:SS")
-    h, m, s = map(int, match.groups())
+        raise UserError("時間格式錯誤，需為 HH:MM:SS 或 HH:MM:SS.ff")
+    h, m, s, frac = match.groups()
+    h, m, s = int(h), int(m), int(s)
     if not (0 <= m < 60 and 0 <= s < 60):
         raise UserError("時間格式錯誤，分秒需介於 00-59")
-    return h * 3600 + m * 60 + s
+
+    extra_seconds = 0.0
+    if frac:
+        if len(frac) <= 2:  # 視為影格
+            frame = int(frac)
+            if not (0 <= frame < fps):
+                raise UserError(f"影格數需介於 0-{fps-1}（當前以 {fps}fps 解讀）")
+            extra_seconds = frame / fps
+        else:
+            # 3 位數維持毫秒向後相容
+            extra_seconds = int(frac) / 1000.0
+
+    return h * 3600 + m * 60 + s + extra_seconds
 
 
 def parse_range(text: str) -> TimeRange:
@@ -294,6 +316,74 @@ def run_ffmpeg(
     except subprocess.CalledProcessError as exc:
         err_msg = exc.stderr.strip() if exc.stderr else str(exc)
         raise UserError(f"ffmpeg 執行失敗: {err_msg}")
+
+
+def run_ffmpeg_precise(
+    video_path: Path,
+    rng: TimeRange,
+    output_path: Path,
+    verbose: bool,
+    ffmpeg_cmd: str,
+    use_hwaccel: bool = False,
+    preview_fast: bool = False,
+) -> None:
+    """重編碼模式，較精準對齊時間（預覽/精準輸出用）"""
+    if output_path.exists():
+        raise UserError(f"輸出檔已存在，避免覆蓋: {output_path}")
+    duration = rng.end - rng.start
+    vcodec = "h264_videotoolbox" if use_hwaccel else "libx264"
+    vopts: list[str] = []
+    if use_hwaccel:
+        vopts = ["-b:v", "8M", "-pix_fmt", "yuv420p"]
+    else:
+        vopts = ["-preset", "ultrafast", "-crf", "20"]
+
+    cmd = [ffmpeg_cmd, "-y"]
+    if use_hwaccel:
+        cmd += ["-hwaccel", "videotoolbox"]
+    cmd += [
+        "-i",
+        str(video_path),
+        "-ss",
+        format_ffmpeg_time(rng.start),
+        "-t",
+        format_ffmpeg_time(duration),
+        "-c:v",
+        vcodec,
+        *vopts,
+    ]
+
+    if preview_fast:
+        # 預覽優先速度：縮小解析度並移除音訊（360p）
+        cmd += ["-vf", "scale=-2:360", "-an"]
+    else:
+        cmd += [
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-b:a",
+            "128k",
+        ]
+
+    cmd += [
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    if verbose:
+        print("[ffmpeg-precise]", " ".join(cmd))
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=not verbose,
+            text=True,
+            env=clean_subprocess_env(),
+        )
+    except subprocess.CalledProcessError as exc:
+        err_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        raise UserError(f"ffmpeg 精準輸出失敗: {err_msg}")
 
 
 def write_srt(output_path: Path, cues: Sequence[SRTCue]) -> None:

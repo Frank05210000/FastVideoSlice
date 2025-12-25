@@ -99,6 +99,14 @@ class SettingsManager:
         self.set("append_time_to_filename", value)
 
     @property
+    def precise_use_hwaccel(self) -> bool:
+        return self.get("precise_use_hwaccel", True)
+
+    @precise_use_hwaccel.setter
+    def precise_use_hwaccel(self, value: bool) -> None:
+        self.set("precise_use_hwaccel", value)
+
+    @property
     def last_ranges(self) -> List[Dict[str, str]]:
         """取得上次的時間區間列表"""
         return self.get("last_ranges", [])

@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QSplitter,
+    QTableWidgetItem,
 )
 
 from .constants import (
@@ -39,6 +40,9 @@ from .constants import (
 from .range_table import RangeTableWidget
 from .settings_manager import SettingsManager
 from .worker import SliceWorker
+from .preview_dialog import PreviewDialog
+
+import fast_video_slice as fvs
 
 
 class MainWindow(QMainWindow):
@@ -51,6 +55,7 @@ class MainWindow(QMainWindow):
 
         self.settings = SettingsManager()
         self.worker: Optional[SliceWorker] = None
+        self.subs_overrides: dict[int, str] = {}
 
         self._build_ui()
         self._load_settings()
@@ -125,6 +130,10 @@ class MainWindow(QMainWindow):
         self.append_time_cb.setToolTip("輸出檔名加入起訖時間，如 clip_001__00-01-10__00-01-45")
         options_layout.addWidget(self.append_time_cb)
 
+        self.hwaccel_cb = QCheckBox("精準輸出使用硬體編碼")
+        self.hwaccel_cb.setToolTip("精準輸出/預覽時使用 VideoToolbox（Apple Silicon）加速，降低等待時間")
+        options_layout.addWidget(self.hwaccel_cb)
+
         options_layout.addStretch()
         main_layout.addWidget(options_group)
 
@@ -187,9 +196,15 @@ class MainWindow(QMainWindow):
         self.run_btn.clicked.connect(self._on_run)
         self.open_folder_btn.clicked.connect(self._open_output_folder)
 
+        # 預覽/微調
+        self.range_table.preview_btn.clicked.connect(self._on_preview_range)
+
         # Log 按鈕
         self.clear_log_btn.clicked.connect(self.log_box.clear)
         self.save_log_btn.clicked.connect(self._save_log)
+
+        # 區間變更後清理不符行數的覆寫字幕（避免 stale）
+        self.range_table.ranges_changed.connect(self._prune_sub_overrides)
 
     def _browse_video(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -224,6 +239,43 @@ class MainWindow(QMainWindow):
         )
         if path:
             self.outdir_edit.setText(path)
+
+    def _on_preview_range(self) -> None:
+        row = self.range_table.table.currentRow()
+        rng = self.range_table.get_range_at(row)
+        if rng is None:
+            QMessageBox.information(self, "提示", "請先選擇一個有效的區間")
+            return
+
+        video = self.video_edit.text().strip()
+        subs = self.subs_edit.text().strip()
+        if not video or not subs:
+            QMessageBox.warning(self, "缺少欄位", "請先選擇影片與字幕檔再預覽")
+            return
+
+        try:
+            fvs.check_files(Path(video), Path(subs))
+        except fvs.UserError as exc:
+            QMessageBox.warning(self, "檔案錯誤", str(exc))
+            return
+
+        dialog = PreviewDialog(
+            video_path=Path(video),
+            subs_path=Path(subs),
+            start=rng["start"],
+            end=rng["end"],
+            title=rng.get("title", ""),
+            initial_subs_text=self.subs_overrides.get(row),
+            initial_precise=rng.get("precise", False),
+            use_hwaccel_default=self.hwaccel_cb.isChecked(),
+            parent=self,
+        )
+        dialog.range_applied.connect(
+            lambda start, end, subs_text, precise, r=row: self._apply_preview_range(
+                r, start, end, subs_text, precise
+            )
+        )
+        dialog.exec_()
 
     def _on_run(self) -> None:
         # 驗證輸入
@@ -265,6 +317,13 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.log_box.clear()
 
+        # 準備字幕覆寫（按行號對應）
+        subs_overrides = []
+        for idx in range(len(ranges)):
+            subs_overrides.append(self.subs_overrides.get(idx))
+
+        precise_flags = [r.get("precise", False) for r in ranges]
+
         # 啟動工作執行緒
         self.worker = SliceWorker(
             video=Path(video),
@@ -274,6 +333,9 @@ class MainWindow(QMainWindow):
             check_duration=self.check_duration_cb.isChecked(),
             verbose=self.verbose_cb.isChecked(),
             append_time=self.append_time_cb.isChecked(),
+            subs_overrides=subs_overrides,
+            precise_flags=precise_flags,
+            use_hwaccel=self.hwaccel_cb.isChecked(),
         )
         self.worker.progress.connect(self._on_progress)
         self.worker.log.connect(self._on_log)
@@ -344,6 +406,32 @@ class MainWindow(QMainWindow):
             except IOError as e:
                 QMessageBox.warning(self, "儲存失敗", str(e))
 
+    def _apply_preview_range(self, row: int, start: str, end: str, subs_text: str, precise: bool) -> None:
+        """將預覽調整後的時間/字幕/精準設定寫回表格"""
+        if row < 0 or row >= self.range_table.table.rowCount():
+            return
+        table = self.range_table.table
+        table.blockSignals(True)
+        table.setItem(row, 2, QTableWidgetItem(start))
+        table.setItem(row, 3, QTableWidgetItem(end))
+        precise_item = QTableWidgetItem("精準輸出")
+        precise_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
+        table.setItem(row, 5, precise_item)
+        # 重置背景色
+        table.item(row, 2).setBackground(Qt.white)
+        table.item(row, 3).setBackground(Qt.white)
+        table.blockSignals(False)
+        self.subs_overrides[row] = subs_text
+        self.range_table.ranges_changed.emit()
+
+    def _prune_sub_overrides(self) -> None:
+        """移除超出表格行數的字幕覆寫"""
+        max_row = self.range_table.table.rowCount() - 1
+        stale_keys = [k for k in self.subs_overrides if k > max_row]
+        for k in stale_keys:
+            self.subs_overrides.pop(k, None)
+
     def _load_settings(self) -> None:
         """從設定檔載入上次的設定"""
         self.video_edit.setText(self.settings.last_video_path)
@@ -352,6 +440,7 @@ class MainWindow(QMainWindow):
         self.check_duration_cb.setChecked(self.settings.check_duration)
         self.verbose_cb.setChecked(self.settings.verbose)
         self.append_time_cb.setChecked(self.settings.append_time_to_filename)
+        self.hwaccel_cb.setChecked(self.settings.precise_use_hwaccel)
         self.range_table.set_ranges(self.settings.last_ranges)
 
         # 視窗位置
@@ -368,6 +457,7 @@ class MainWindow(QMainWindow):
         self.settings.check_duration = self.check_duration_cb.isChecked()
         self.settings.verbose = self.verbose_cb.isChecked()
         self.settings.append_time_to_filename = self.append_time_cb.isChecked()
+        self.settings.precise_use_hwaccel = self.hwaccel_cb.isChecked()
         self.settings.last_ranges = self.range_table.get_ranges()
         self.settings.window_geometry = {
             "x": self.x(),

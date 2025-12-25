@@ -26,6 +26,12 @@ from PyQt5.QtWidgets import (
 )
 
 from .constants import TIME_PATTERN, COLORS
+import fast_video_slice as fvs
+
+
+def _to_seconds(text: str) -> float:
+    """將 HH:MM:SS(.ff) 轉為秒數（ff 依 30fps 解讀為影格）"""
+    return fvs.parse_hms(text)
 
 
 class TimeRangeDialog(QDialog):
@@ -45,18 +51,18 @@ class TimeRangeDialog(QDialog):
         layout.addRow("標題：", self.title_edit)
 
         self.start_edit = QLineEdit(start)
-        self.start_edit.setPlaceholderText("HH:MM:SS")
+        self.start_edit.setPlaceholderText("HH:MM:SS 或 HH:MM:SS.ff（ff 為影格，預設 30fps）")
         layout.addRow("開始時間：", self.start_edit)
 
         self.end_edit = QLineEdit(end)
-        self.end_edit.setPlaceholderText("HH:MM:SS")
+        self.end_edit.setPlaceholderText("HH:MM:SS 或 HH:MM:SS.ff（ff 為影格，預設 30fps）")
         layout.addRow("結束時間：", self.end_edit)
 
         self.note_edit = QLineEdit(note)
         self.note_edit.setPlaceholderText("（選填）")
         layout.addRow("備註：", self.note_edit)
 
-        hint = QLabel("格式：HH:MM:SS（例如 00:01:30）")
+        hint = QLabel("格式：HH:MM:SS 或 HH:MM:SS.ff（ff 以 30fps 計算影格，例如 00:01:30.15）")
         hint.setProperty("hint", True)
         layout.addRow(hint)
 
@@ -69,29 +75,22 @@ class TimeRangeDialog(QDialog):
         start = self.start_edit.text().strip()
         end = self.end_edit.text().strip()
 
-        if not re.match(TIME_PATTERN, start):
-            QMessageBox.warning(self, "格式錯誤", "開始時間格式需為 HH:MM:SS")
-            self.start_edit.setFocus()
-            return
-
-        if not re.match(TIME_PATTERN, end):
-            QMessageBox.warning(self, "格式錯誤", "結束時間格式需為 HH:MM:SS")
-            self.end_edit.setFocus()
-            return
-
-        # 驗證 start < end
-        if not self._validate_time_order(start, end):
-            QMessageBox.warning(self, "區間錯誤", "開始時間必須小於結束時間")
+        try:
+            # 會檢查格式與影格範圍
+            if not re.match(TIME_PATTERN, start) or not re.match(TIME_PATTERN, end):
+                raise ValueError
+            if not self._validate_time_order(start, end):
+                raise ValueError("開始時間必須小於結束時間")
+        except Exception as exc:
+            msg = str(exc) if str(exc) else "時間格式需為 HH:MM:SS 或 HH:MM:SS.ff（ff 為影格，預設 30fps）"
+            QMessageBox.warning(self, "格式錯誤", msg)
             return
 
         self.accept()
 
     def _validate_time_order(self, start: str, end: str) -> bool:
         """驗證開始時間小於結束時間"""
-        def to_seconds(t: str) -> int:
-            parts = t.split(":")
-            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-        return to_seconds(start) < to_seconds(end)
+        return _to_seconds(start) < _to_seconds(end)
 
     def get_values(self) -> Tuple[str, str, str, str]:
         return (
@@ -118,19 +117,21 @@ class RangeTableWidget(QWidget):
 
         # 表格
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["#", "標題", "開始時間", "結束時間", "備註"])
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(["#", "標題", "開始時間", "結束時間", "備註", "精準"])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
         header.setSectionResizeMode(1, QHeaderView.Interactive)
         header.setSectionResizeMode(2, QHeaderView.Interactive)
         header.setSectionResizeMode(3, QHeaderView.Interactive)
         header.setSectionResizeMode(4, QHeaderView.Interactive)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 200)
         self.table.setColumnWidth(2, 130)
         self.table.setColumnWidth(3, 130)
         self.table.setColumnWidth(4, 200)
+        self.table.setColumnWidth(5, 80)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setAlternatingRowColors(True)
@@ -160,6 +161,10 @@ class RangeTableWidget(QWidget):
         self.edit_btn.setProperty("secondary", True)
         self.edit_btn.clicked.connect(self._on_edit_clicked)
         btn_layout.addWidget(self.edit_btn)
+
+        self.preview_btn = QPushButton("預覽/微調")
+        self.preview_btn.setProperty("secondary", True)
+        btn_layout.addWidget(self.preview_btn)
 
         btn_layout.addSpacing(20)
 
@@ -195,7 +200,7 @@ class RangeTableWidget(QWidget):
         layout.addLayout(btn_layout)
 
         # 格式提示
-        hint = QLabel("格式：HH:MM:SS（標題可用於輸出檔名，雙擊表格內直接編輯）")
+        hint = QLabel("格式：HH:MM:SS 或 HH:MM:SS.ff（ff 以 30fps 計算影格，雙擊表格內直接編輯）")
         hint.setProperty("hint", True)
         layout.addWidget(hint)
 
@@ -216,7 +221,7 @@ class RangeTableWidget(QWidget):
             self._add_row(title, start, end, note)
             self.ranges_changed.emit()
 
-    def _add_row(self, title: str = "", start: str = "", end: str = "", note: str = "") -> None:
+    def _add_row(self, title: str = "", start: str = "", end: str = "", note: str = "", precise: bool = False) -> None:
         row = self.table.rowCount()
         self.table.blockSignals(True)
         self.table.insertRow(row)
@@ -236,6 +241,12 @@ class RangeTableWidget(QWidget):
         # 備註
         self.table.setItem(row, 4, QTableWidgetItem(note))
 
+        # 精準輸出勾選
+        precise_item = QTableWidgetItem("精準輸出")
+        precise_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
+        self.table.setItem(row, 5, precise_item)
+
         self.table.blockSignals(False)
 
     def _on_delete(self) -> None:
@@ -252,7 +263,8 @@ class RangeTableWidget(QWidget):
             start = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
             end = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
             note = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
-            self._add_row(title, start, end, note)
+            precise = self.table.item(row, 5).checkState() == Qt.Checked if self.table.item(row, 5) else False
+            self._add_row(title, start, end, note, precise)
             self.ranges_changed.emit()
 
     def _on_edit_clicked(self) -> None:
@@ -265,6 +277,7 @@ class RangeTableWidget(QWidget):
         start = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
         end = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
         note = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
+        precise = self.table.item(row, 5).checkState() == Qt.Checked if self.table.item(row, 5) else False
 
         dialog = TimeRangeDialog(self, title=title, start=start, end=end, note=note)
         if dialog.exec_() == QDialog.Accepted:
@@ -274,6 +287,11 @@ class RangeTableWidget(QWidget):
             self.table.setItem(row, 2, QTableWidgetItem(new_start))
             self.table.setItem(row, 3, QTableWidgetItem(new_end))
             self.table.setItem(row, 4, QTableWidgetItem(new_note))
+            # 保留原有精準選擇
+            precise_item = QTableWidgetItem("精準輸出")
+            precise_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
+            self.table.setItem(row, 5, precise_item)
             self.table.blockSignals(False)
             self.ranges_changed.emit()
 
@@ -293,7 +311,7 @@ class RangeTableWidget(QWidget):
 
     def _swap_rows(self, row1: int, row2: int) -> None:
         self.table.blockSignals(True)
-        for col in range(1, 5):  # 跳過序號欄
+        for col in range(1, 6):  # 跳過序號欄
             item1 = self.table.takeItem(row1, col)
             item2 = self.table.takeItem(row2, col)
             self.table.setItem(row1, col, item2)
@@ -331,7 +349,7 @@ class RangeTableWidget(QWidget):
                     parts = line.split(",", 1)
                     title = parts[0].strip()
                     line = parts[1].strip()
-                match = re.match(r"(\d{2}:\d{2}:\d{2})\s*->\s*(\d{2}:\d{2}:\d{2})", line)
+                match = re.match(r"(\d{2}:\d{2}:\d{2}(?:[.:]\d{1,2})?)\s*->\s*(\d{2}:\d{2}:\d{2}(?:[.:]\d{1,2})?)", line)
                 if match:
                     self._add_row(title, match.group(1), match.group(2))
             self._update_row_numbers()
@@ -362,16 +380,16 @@ class RangeTableWidget(QWidget):
         """複製 AI 提示詞樣式到剪貼簿"""
         from PyQt5.QtWidgets import QApplication
         template = """請依照以下格式輸出影片裁切區間，每行一段：
-標題,HH:MM:SS -> HH:MM:SS
+標題,HH:MM:SS(.ff) -> HH:MM:SS(.ff)   （ff 為影格，預設 30fps）
 
 規則：
 - 標題需唯一（不可重複）
 - 標題會用於輸出檔名，非法字元會轉為底線
-- 若不需標題可省略：HH:MM:SS -> HH:MM:SS
+- 若不需標題可省略：HH:MM:SS(.ff) -> HH:MM:SS(.ff)
 
 範例：
-精華片段一,00:01:10 -> 00:01:45
-重點說明,00:05:00 -> 00:05:30
+精華片段一,00:01:10.00 -> 00:01:45.15
+重點說明,00:05:00 -> 00:05:30.25
 結尾彩蛋,00:10:00 -> 00:10:20"""
         clipboard = QApplication.clipboard()
         clipboard.setText(template)
@@ -385,20 +403,56 @@ class RangeTableWidget(QWidget):
             start_item = self.table.item(row, 2)
             end_item = self.table.item(row, 3)
             note_item = self.table.item(row, 4)
+            precise_item = self.table.item(row, 5)
             if start_item and end_item:
                 title = title_item.text().strip() if title_item else ""
                 start = start_item.text().strip()
                 end = end_item.text().strip()
                 note = note_item.text().strip() if note_item else ""
+                precise = precise_item.checkState() == Qt.Checked if precise_item else False
                 if start and end:
-                    ranges.append({"title": title, "start": start, "end": end, "note": note})
+                    ranges.append(
+                        {
+                            "title": title,
+                            "start": start,
+                            "end": end,
+                            "note": note,
+                            "precise": precise,
+                        }
+                    )
         return ranges
+
+    def get_range_at(self, row: int) -> Optional[dict]:
+        """取得指定列的區間資料"""
+        if row < 0 or row >= self.table.rowCount():
+            return None
+        title_item = self.table.item(row, 1)
+        start_item = self.table.item(row, 2)
+        end_item = self.table.item(row, 3)
+        note_item = self.table.item(row, 4)
+        precise_item = self.table.item(row, 5)
+        if not start_item or not end_item:
+            return None
+        title = title_item.text().strip() if title_item else ""
+        start = start_item.text().strip()
+        end = end_item.text().strip()
+        note = note_item.text().strip() if note_item else ""
+        precise = precise_item.checkState() == Qt.Checked if precise_item else False
+        if not start or not end:
+            return None
+        return {"title": title, "start": start, "end": end, "note": note, "precise": precise}
 
     def set_ranges(self, ranges: List[dict]) -> None:
         """設定區間資料（用於載入設定）"""
         self.table.setRowCount(0)
         for r in ranges:
-            self._add_row(r.get("title", ""), r.get("start", ""), r.get("end", ""), r.get("note", ""))
+            self._add_row(
+                r.get("title", ""),
+                r.get("start", ""),
+                r.get("end", ""),
+                r.get("note", ""),
+                r.get("precise", False),
+            )
 
     def clear(self) -> None:
         """清空表格"""
@@ -415,22 +469,21 @@ class RangeTableWidget(QWidget):
         for row in range(self.table.rowCount()):
             start_item = self.table.item(row, 2)
             end_item = self.table.item(row, 3)
-            
+
             start = start_item.text().strip() if start_item else ""
             end = end_item.text().strip() if end_item else ""
-            
+
             if not re.match(TIME_PATTERN, start) or not re.match(TIME_PATTERN, end):
                 error_rows.append(row)
                 continue
-            
-            # 驗證 start < end
-            def to_seconds(t: str) -> int:
-                parts = t.split(":")
-                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-            
-            if to_seconds(start) >= to_seconds(end):
+
+            # 驗證 start < end，並讓 parse_hms 幫忙檢查影格範圍
+            try:
+                if _to_seconds(start) >= _to_seconds(end):
+                    error_rows.append(row)
+            except Exception:
                 error_rows.append(row)
-        
+
         return len(error_rows) == 0, error_rows
 
     def highlight_error_rows(self, rows: List[int]) -> None:
