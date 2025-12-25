@@ -1,3 +1,59 @@
+# FastVideoSlice
+
+影片/字幕多段切片工具（CLI + GUI）。支援標題檔名、影格時間輸入、精準重編碼模式、硬體編碼加速、預覽微調（可編輯單段字幕）。
+
+## 目錄
+- [快速開始](#快速開始)
+- [安裝 ffmpeg/ffprobe](#安裝-ffmpegffprobe)
+- [功能亮點](#功能亮點)
+- [路徑與設定](#路徑與設定)
+- [精準-vs-快速](#精準-vs-快速)
+- [文件](#文件)
+- [原始規格（保留）](#原始規格保留)
+
+## 快速開始
+- 需求：Python 3.8+，`ffmpeg`/`ffprobe` 在 PATH；GUI 需 PyQt5（`pip install -r requirements.txt`）
+- CLI：`python3 fast_video_slice.py --video in.mp4 --subs in.srt --range "00:01:10.05 -> 00:01:45.20" --outdir clips`
+- GUI：`python3 -m gui`
+
+## 安裝 ffmpeg/ffprobe
+- Python 下載：<https://www.python.org/downloads/>
+- macOS（Homebrew）：
+  - 安裝 Homebrew：<https://brew.sh/>
+  - `brew install ffmpeg`
+- Windows：
+  - 若已裝 Chocolatey：以系統管理員 PowerShell 執行 `choco install ffmpeg`
+  - 或 Scoop：`scoop install ffmpeg`
+  - 或下載官方 build（含 ffprobe）：<https://www.gyan.dev/ffmpeg/builds/>，解壓後將 `bin` 路徑加入環境變數 PATH
+- Linux（Debian/Ubuntu）：`sudo apt-get install ffmpeg`
+- 確認：`ffmpeg -version` 與 `ffprobe -version` 需可在終端執行
+
+## 功能亮點
+- 多段區間 `HH:MM:SS(.ff)`（.ff 以 30fps 解析），可加標題作為檔名
+- 預設快速裁切 `-c copy`，無損但受關鍵影格影響
+- 精準輸出（重編碼），可 per-clip 勾選；可選硬體編碼 (VideoToolbox, Apple Silicon)
+- 預覽：可微調時間/字幕、切換精準/硬體加速，快速轉碼 360p 無音、可取消，影片下方顯示當前字幕行
+- 字幕切片：僅保留交集、時間重設為 00:00:00、序號重排；可針對單段覆寫字幕文本
+
+## 路徑與設定
+- 設定檔：`~/.fastvideoslice_settings.json`（GUI 路徑、區間、勾選狀態）
+- 預覽暫存：系統 temp/`fastvideoslice_preview`
+- 輸出預設：`clips/clip_001.mp4` + `.srt`（或標題檔名）
+
+## 精準-vs-快速
+- 快速（預設）：`-c copy`，快且無損，但微調可能被關鍵影格吸附
+- 精準：重編碼，時間貼合，速度慢；可勾硬體編碼加速
+- 預覽在精準模式下用 360p 無音快速轉碼，加速回饋；正式輸出依勾選決定 copy 或重編碼
+
+## 文件
+- [`docs/setup.md`](docs/setup.md) 環境安裝
+- [`docs/cli.md`](docs/cli.md) CLI 用法
+- [`docs/gui.md`](docs/gui.md) GUI 流程與選項
+- [`docs/precision.md`](docs/precision.md) 精準/硬體/預覽說明
+- [`docs/changelog.md`](docs/changelog.md) 變更摘要；細節見 `UPDATE_LOG.md`
+- [`docs/README.md`](docs/README.md) 文件導覽
+
+## 原始規格（保留）
 影片剪輯工具規格書 v1.0
 
 【維護狀態】目前僅維護 CLI / GUI，`web/` 目錄暫不更新（可忽略）。
@@ -137,7 +193,7 @@
 	1.	單段裁切
 	•	輸入 00:00:05 -> 00:00:10，輸出影片約 5 秒，字幕時間從 00:00:00 開始
 	2.	多段裁切
-	•	輸入兩段區間，輸出兩組 mp4+srt，序號對應正確
+	•	輸出兩組 mp4+srt，序號對應正確
 	3.	字幕交集裁切
 	•	有字幕跨越區間邊界時，字幕時間被裁掉並重置
 	4.	錯誤輸入

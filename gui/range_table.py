@@ -330,30 +330,59 @@ class RangeTableWidget(QWidget):
         self.ranges_changed.emit()
 
     def _on_import(self) -> None:
-        """從文字匯入區間"""
+        """從文字匯入區間（容錯：以核心 parse_hms 驗證）"""
         from PyQt5.QtWidgets import QInputDialog
         text, ok = QInputDialog.getMultiLineText(
             self,
             "匯入區間",
-            "每行一個區間，格式：標題,HH:MM:SS -> HH:MM:SS 或 HH:MM:SS -> HH:MM:SS",
+            "每行一個區間，格式：標題,HH:MM:SS(.ff) -> HH:MM:SS(.ff) 或 HH:MM:SS(.ff) -> HH:MM:SS(.ff)",
         )
-        if ok and text.strip():
-            lines = text.strip().split("\n")
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                # 解析 標題,HH:MM:SS -> HH:MM:SS 或 HH:MM:SS -> HH:MM:SS
-                title = ""
-                if "," in line:
-                    parts = line.split(",", 1)
-                    title = parts[0].strip()
-                    line = parts[1].strip()
-                match = re.match(r"(\d{2}:\d{2}:\d{2}(?:[.:]\d{1,2})?)\s*->\s*(\d{2}:\d{2}:\d{2}(?:[.:]\d{1,2})?)", line)
-                if match:
-                    self._add_row(title, match.group(1), match.group(2))
-            self._update_row_numbers()
-            self.ranges_changed.emit()
+        if not (ok and text.strip()):
+            return
+
+        lines = text.strip().split("\n")
+        invalid_lines = []
+        added = 0
+
+        for raw in lines:
+            line = raw.strip()
+            if not line:
+                continue
+
+            title = ""
+            times_part = line
+            if "," in line:
+                title, times_part = line.split(",", 1)
+                title = title.strip()
+                times_part = times_part.strip()
+
+            parts = re.split(r"\s*->\s*", times_part)
+            if len(parts) != 2:
+                invalid_lines.append(raw)
+                continue
+
+            start_str, end_str = parts[0].strip(), parts[1].strip()
+            try:
+                start_s = fvs.parse_hms(start_str)
+                end_s = fvs.parse_hms(end_str)
+                if start_s >= end_s:
+                    raise ValueError("start>=end")
+            except Exception:
+                invalid_lines.append(raw)
+                continue
+
+            self._add_row(title, start_str, end_str)
+            added += 1
+
+        self._update_row_numbers()
+        self.ranges_changed.emit()
+
+        if invalid_lines:
+            QMessageBox.warning(
+                self,
+                "部分匯入失敗",
+                f"{len(invalid_lines)} 行格式無效或 start>=end，已略過。\n\n無效行：\n" + "\n".join(invalid_lines[:5]),
+            )
 
     def _on_export(self) -> None:
         """匯出區間為文字"""

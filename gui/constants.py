@@ -11,9 +11,9 @@ SETTINGS_FILE = ".fastvideoslice_settings.json"
 WINDOW_WIDTH = 900
 WINDOW_HEIGHT = 700
 
-# 時間格式（影格附檔位，預設 30fps：HH:MM:SS.ff）
+# 時間格式（影格附檔位，預設 30fps：HH:MM:SS.ff；為容錯，接受 1~3 位小數/影格）
 TIME_FORMAT = "HH:MM:SS(.ff)"
-TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}(?:[.:]\d{1,2})?$"
+TIME_PATTERN = r"^\d{2}:\d{2}:\d{2}(?:[.:]\d{1,3})?$"
 RANGE_SEPARATOR = " -> "
 
 # 顏色定義
