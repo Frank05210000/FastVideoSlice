@@ -5,16 +5,45 @@
 ## 目錄
 - [快速開始](#快速開始)
 - [安裝 ffmpeg/ffprobe](#安裝-ffmpegffprobe)
+- [GUI 快速開始（零基礎）](#gui-快速開始零基礎)
 - [功能亮點](#功能亮點)
 - [路徑與設定](#路徑與設定)
 - [精準-vs-快速](#精準-vs-快速)
-- [文件](#文件)
+- [解說文件](#解說文件)
 - [原始規格（保留）](#原始規格保留)
 
 ## 快速開始
 - 需求：Python 3.8+，`ffmpeg`/`ffprobe` 在 PATH；GUI 需 PyQt5（`pip install -r requirements.txt`）
 - CLI：`python3 fast_video_slice.py --video in.mp4 --subs in.srt --range "00:01:10.05 -> 00:01:45.20" --outdir clips`
 - GUI：`python3 -m gui`
+
+## GUI 快速開始
+給沒有開發背景的使用者，一步步把 GUI 跑起來。
+
+1) 安裝 Python（若已安裝，可跳過） 
+   - 下載並安裝：<https://www.python.org/downloads/>（安裝時勾選「Add Python to PATH」/「Add to environment variables」）
+2) 安裝 ffmpeg/ffprobe（若已安裝，可跳過）  
+   - macOS：用 Spotlight 搜尋「Terminal」，打開後執行 `brew install ffmpeg`（先安裝 Homebrew：<https://brew.sh/>）  
+   - Windows：用「開始」搜尋「PowerShell」，右鍵「以系統管理員身分執行」，輸入 `choco install ffmpeg`（若未安裝 Chocolatey：<https://chocolatey.org/install>），或改用 Scoop：`scoop install ffmpeg`  
+   - 確認：在 Terminal/PowerShell 輸入 `ffmpeg -version`、`ffprobe -version`，能顯示版本即完成。
+3) 下載專案程式碼（若已下載，可跳過） 
+   - 點擊 GitHub 的「Code」→「Download ZIP」，解壓後得到資料夾 `FastVideoSlice`。
+4) 建立與啟用虛擬環境  
+   - 打開 Terminal/PowerShell，先切換到專案資料夾（例如 `cd 路徑/FastVideoSlice`）。  
+   - 建立環境：`python -m venv .venv`  
+   - 啟用環境：  
+     - macOS/Linux：`source .venv/bin/activate`  
+     - Windows：`.venv\Scripts\activate`
+5) 安裝依賴  
+   ```bash
+   pip install -r requirements.txt
+   ```
+6) 啟動 GUI  
+   ```bash
+   python -m gui
+   ```  
+   出現視窗後，選影片/字幕、填區間即可使用。
+7) 結束後關閉視窗，若要停用虛擬環境，在 Terminal/PowerShell 輸入 `deactivate`。
 
 ## 安裝 ffmpeg/ffprobe
 - Python 下載：<https://www.python.org/downloads/>
@@ -45,7 +74,7 @@
 - 精準：重編碼，時間貼合，速度慢；可勾硬體編碼加速
 - 預覽在精準模式下用 360p、低碼率音訊快速轉碼，加速回饋；未開精準時用 `-c copy` 預覽；正式輸出依勾選決定 copy 或重編碼
 
-## 文件
+## 解說文件
 - [`docs/setup.md`](docs/setup.md) 環境安裝
 - [`docs/cli.md`](docs/cli.md) CLI 用法
 - [`docs/gui.md`](docs/gui.md) GUI 流程與選項
@@ -53,7 +82,7 @@
 - [`docs/changelog.md`](docs/changelog.md) 變更摘要；細節見 `UPDATE_LOG.md`
 - [`docs/README.md`](docs/README.md) 文件導覽
 
-## 原始規格（保留）
+## 原始規格
 影片剪輯工具規格書 v1.0
 
 【維護狀態】目前僅維護 CLI / GUI，`web/` 目錄暫不更新（可忽略）。
