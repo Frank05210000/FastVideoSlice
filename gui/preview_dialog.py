@@ -59,6 +59,8 @@ class PreviewDialog(QDialog):
         self._subs_dirty = False
         self._busy = False
         self._proc: QProcess | None = None
+        self._sliced_cues: list[fvs.SRTCue] = []
+        self._sliced_cues = []
 
         self.temp_dir = Path(tempfile.gettempdir()) / "fastvideoslice_preview"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +77,22 @@ class PreviewDialog(QDialog):
 
         # 影片區
         self.video_widget = QVideoWidget()
-        layout.addWidget(self.video_widget, 2)
+        self.video_widget.setMinimumHeight(480)  # 放大預覽區域（即使源為 360p 也可放大顯示）
+        layout.addWidget(self.video_widget, 3)
+
+        # 即時字幕顯示（置於影片下方，非疊加）
+        self.live_sub_label = QLabel("")
+        self.live_sub_label.setWordWrap(True)
+        self.live_sub_label.setAlignment(Qt.AlignCenter)
+        self.live_sub_label.setStyleSheet(
+            "background: rgba(0,0,0,0.05);"
+            "border: 1px solid #D1D5DB;"
+            "border-radius: 6px;"
+            "padding: 8px;"
+            "margin-top: 6px;"
+            "font-size: 14px;"
+        )
+        layout.addWidget(self.live_sub_label)
 
         # 播放控制
         self.player = QMediaPlayer(self)
@@ -267,6 +284,7 @@ class PreviewDialog(QDialog):
             self.seek_slider.setValue(int(ratio * 1000))
             self.seek_slider.blockSignals(False)
         self._update_position_label(pos_ms, self._duration_ms)
+        self._update_live_sub(pos_ms)
 
     def _on_slider_moved(self, value: int) -> None:
         if self._duration_ms > 0:
@@ -282,7 +300,11 @@ class PreviewDialog(QDialog):
     def _build_ffmpeg_cmd(self, rng: fvs.TimeRange) -> list[str]:
         if self.precise_cb.isChecked():
             vcodec = "h264_videotoolbox" if self.hwaccel_cb.isChecked() else "libx264"
-            vopts = ["-b:v", "8M", "-pix_fmt", "yuv420p"] if self.hwaccel_cb.isChecked() else ["-preset", "ultrafast", "-crf", "20"]
+            vopts = (
+                ["-b:v", "8M", "-pix_fmt", "yuv420p"]
+                if self.hwaccel_cb.isChecked()
+                else ["-preset", "ultrafast", "-crf", "20"]
+            )
             cmd = [self._ffmpeg_cmd, "-y"]
             if self.hwaccel_cb.isChecked():
                 cmd += ["-hwaccel", "videotoolbox"]
@@ -298,7 +320,12 @@ class PreviewDialog(QDialog):
                 *vopts,
                 "-vf",
                 "scale=-2:360",
-                "-an",
+                "-c:a",
+                "aac",
+                "-ac",
+                "2",
+                "-b:a",
+                "96k",
                 "-movflags",
                 "+faststart",
                 str(self.preview_path),
@@ -322,6 +349,8 @@ class PreviewDialog(QDialog):
     def _start_process(self, cmd: list[str], rng: fvs.TimeRange) -> None:
         if self._proc:
             self._proc.kill()
+            self._proc.waitForFinished(2000)
+            self._proc.deleteLater()
             self._proc = None
         self._proc = QProcess(self)
         env = self._proc.processEnvironment()
@@ -333,11 +362,16 @@ class PreviewDialog(QDialog):
         self._proc.start(cmd[0], cmd[1:])
 
     def _on_proc_finished(self, rng: fvs.TimeRange) -> None:
-        if self._proc and self._proc.exitStatus() == QProcess.NormalExit and self._proc.exitCode() == 0:
+        if not self._proc:
+            return
+        if self._proc.exitStatus() == QProcess.NormalExit and self._proc.exitCode() == 0:
             try:
                 sliced_cues = fvs.slice_cues(self._cues, rng)
+                self._sliced_cues = sliced_cues
                 if not self._subs_dirty:
                     self._set_subs_text(fvs.format_srt(sliced_cues), mark_dirty=False)
+                # 初始字幕顯示
+                self._update_live_sub(0)
 
                 media = QMediaContent(QUrl.fromLocalFile(str(self.preview_path)))
                 self.player.setMedia(media)
@@ -359,14 +393,35 @@ class PreviewDialog(QDialog):
     def _cancel_preview(self) -> None:
         if self._proc:
             self._proc.kill()
+            self._proc.waitForFinished(2000)
         self._set_busy(False, "已取消產生")
+        self._cleanup_proc()
 
     def _cleanup_proc(self) -> None:
         if self._proc:
             self._proc.deleteLater()
             self._proc = None
+        # 保留 _sliced_cues，供即時字幕使用
+
+    def _update_live_sub(self, pos_ms: int) -> None:
+        """根據播放時間更新下方字幕顯示"""
+        if not self._sliced_cues:
+            self.live_sub_label.setText("")
+            return
+        pos_s = pos_ms / 1000.0
+        text = ""
+        for cue in self._sliced_cues:
+            if cue.start <= pos_s <= cue.end:
+                text = "\n".join(cue.lines)
+                break
+        self.live_sub_label.setText(text)
 
     def closeEvent(self, event) -> None:
+        if self._proc:
+            self._proc.kill()
+            self._proc.waitForFinished(2000)
+            self._proc.deleteLater()
+            self._proc = None
         self.player.stop()
         try:
             if self.preview_path.exists():

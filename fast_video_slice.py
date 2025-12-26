@@ -354,8 +354,17 @@ def run_ffmpeg_precise(
     ]
 
     if preview_fast:
-        # 預覽優先速度：縮小解析度並移除音訊（360p）
-        cmd += ["-vf", "scale=-2:360", "-an"]
+        # 預覽優先速度：縮小解析度並保留低碼率音訊（360p）
+        cmd += [
+            "-vf",
+            "scale=-2:360",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-b:a",
+            "96k",
+        ]
     else:
         cmd += [
             "-c:a",

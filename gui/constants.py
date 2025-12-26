@@ -18,17 +18,17 @@ RANGE_SEPARATOR = " -> "
 
 # 顏色定義
 COLORS = {
-    "primary": "#2563EB",      # 主要按鈕藍色
+    "primary": "#2563EB",        # 主要按鈕藍色
     "primary_hover": "#1D4ED8",
-    "error": "#DC2626",        # 錯誤紅色
-    "error_bg": "#FEE2E2",     # 錯誤背景淺紅
-    "success": "#16A34A",      # 成功綠色
-    "warning": "#F59E0B",      # 警告橙色
-    "background": "#F9FAFB",   # 背景色
-    "surface": "#FFFFFF",      # 表面色
-    "border": "#E5E7EB",       # 邊框色
-    "text": "#111827",         # 主要文字
-    "text_secondary": "#6B7280", # 次要文字
+    "error": "#DC2626",          # 錯誤紅色
+    "error_bg": "#FEE2E2",       # 錯誤背景淺紅
+    "success": "#16A34A",        # 成功綠色
+    "warning": "#F59E0B",        # 警告橙色
+    "background": "#FFFFFF",     # 更淺的背景
+    "surface": "#F8FAFC",        # 卡片/群組背景
+    "border": "#D1D5DB",         # 邊框色
+    "text": "#0F172A",           # 主要文字
+    "text_secondary": "#475569", # 次要文字
 }
 
 # 樣式表
@@ -77,7 +77,7 @@ QPushButton:disabled {{
 }}
 
 QPushButton[secondary="true"] {{
-    background-color: {COLORS['surface']};
+    background-color: {COLORS['background']};
     color: {COLORS['text']};
     border: 1px solid {COLORS['border']};
 }}

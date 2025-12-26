@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QSplitter,
     QTableWidgetItem,
 )
+from PyQt5.QtGui import QPalette, QColor
 
 from .constants import (
     APP_NAME,
@@ -487,7 +488,33 @@ class MainWindow(QMainWindow):
 
 def run_app() -> int:
     """啟動應用程式"""
+    import tempfile
+
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
+    # 強制使用淺色系調色盤，避免系統深色主題影響
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor("#FFFFFF"))
+    palette.setColor(QPalette.Base, QColor("#FFFFFF"))
+    palette.setColor(QPalette.AlternateBase, QColor("#F8FAFC"))
+    palette.setColor(QPalette.Text, QColor("#0F172A"))
+    palette.setColor(QPalette.WindowText, QColor("#0F172A"))
+    palette.setColor(QPalette.Button, QColor("#F8FAFC"))
+    palette.setColor(QPalette.ButtonText, QColor("#0F172A"))
+    palette.setColor(QPalette.Highlight, QColor("#2563EB"))
+    palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
+    app.setPalette(palette)
+
+    # 啟動時清理殘留的預覽暫存
+    try:
+        temp_dir = Path(tempfile.gettempdir()) / "fastvideoslice_preview"
+        if temp_dir.exists():
+            for p in temp_dir.glob("*.mp4"):
+                p.unlink()
+    except Exception:
+        pass  # 清理失敗不影響啟動
+
     app.setStyleSheet(STYLESHEET)
 
     window = MainWindow()
