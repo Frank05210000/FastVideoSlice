@@ -117,8 +117,8 @@ class RangeTableWidget(QWidget):
 
         # 表格
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["#", "標題", "開始時間", "結束時間", "備註", "精準"])
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(["#", "標題", "開始時間", "結束時間", "備註", "精準", "已調整"])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
         header.setSectionResizeMode(1, QHeaderView.Interactive)
@@ -126,12 +126,14 @@ class RangeTableWidget(QWidget):
         header.setSectionResizeMode(3, QHeaderView.Interactive)
         header.setSectionResizeMode(4, QHeaderView.Interactive)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 200)
         self.table.setColumnWidth(2, 130)
         self.table.setColumnWidth(3, 130)
         self.table.setColumnWidth(4, 200)
         self.table.setColumnWidth(5, 80)
+        self.table.setColumnWidth(6, 80)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setAlternatingRowColors(True)
@@ -221,7 +223,7 @@ class RangeTableWidget(QWidget):
             self._add_row(title, start, end, note)
             self.ranges_changed.emit()
 
-    def _add_row(self, title: str = "", start: str = "", end: str = "", note: str = "", precise: bool = False) -> None:
+    def _add_row(self, title: str = "", start: str = "", end: str = "", note: str = "", precise: bool = False, adjusted: bool = False) -> None:
         row = self.table.rowCount()
         self.table.blockSignals(True)
         self.table.insertRow(row)
@@ -247,6 +249,12 @@ class RangeTableWidget(QWidget):
         precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
         self.table.setItem(row, 5, precise_item)
 
+        # 已調整標記（程式決定，非使用者勾選）
+        adjusted_item = QTableWidgetItem("✓" if adjusted else "")
+        adjusted_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        adjusted_item.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(row, 6, adjusted_item)
+
         self.table.blockSignals(False)
 
     def _on_delete(self) -> None:
@@ -264,7 +272,8 @@ class RangeTableWidget(QWidget):
             end = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
             note = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
             precise = self.table.item(row, 5).checkState() == Qt.Checked if self.table.item(row, 5) else False
-            self._add_row(title, start, end, note, precise)
+            adjusted = self.table.item(row, 6).checkState() == Qt.Checked if self.table.item(row, 6) else False
+            self._add_row(title, start, end, note, precise, adjusted)
             self.ranges_changed.emit()
 
     def _on_edit_clicked(self) -> None:
@@ -278,10 +287,18 @@ class RangeTableWidget(QWidget):
         end = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
         note = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
         precise = self.table.item(row, 5).checkState() == Qt.Checked if self.table.item(row, 5) else False
+        adjusted = self.table.item(row, 6).checkState() == Qt.Checked if self.table.item(row, 6) else False
 
         dialog = TimeRangeDialog(self, title=title, start=start, end=end, note=note)
         if dialog.exec_() == QDialog.Accepted:
             new_title, new_start, new_end, new_note = dialog.get_values()
+            changed = (
+                new_title.strip() != title.strip()
+                or new_start.strip() != start.strip()
+                or new_end.strip() != end.strip()
+                or new_note.strip() != note.strip()
+            )
+            adjusted = adjusted or changed
             self.table.blockSignals(True)
             self.table.setItem(row, 1, QTableWidgetItem(new_title))
             self.table.setItem(row, 2, QTableWidgetItem(new_start))
@@ -292,6 +309,7 @@ class RangeTableWidget(QWidget):
             precise_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
             self.table.setItem(row, 5, precise_item)
+            self._set_adjusted(row, adjusted)
             self.table.blockSignals(False)
             self.ranges_changed.emit()
 
@@ -311,7 +329,7 @@ class RangeTableWidget(QWidget):
 
     def _swap_rows(self, row1: int, row2: int) -> None:
         self.table.blockSignals(True)
-        for col in range(1, 6):  # 跳過序號欄
+        for col in range(1, 7):  # 跳過序號欄
             item1 = self.table.takeItem(row1, col)
             item2 = self.table.takeItem(row2, col)
             self.table.setItem(row1, col, item2)
@@ -327,7 +345,34 @@ class RangeTableWidget(QWidget):
                     item.setBackground(Qt.red)
                 else:
                     item.setBackground(Qt.white)
+                # 任何時間變更都標記為已調整
+                self._mark_adjusted(row)
+        elif col == 5:  # 精準勾選變更
+            self._mark_adjusted(row)
         self.ranges_changed.emit()
+
+    def _mark_adjusted(self, row: int) -> None:
+        """標記該列已調整（由程式控制，使用者不可勾選）"""
+        if row < 0 or row >= self.table.rowCount():
+            return
+        adjusted_item = QTableWidgetItem("✓")
+        adjusted_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        adjusted_item.setTextAlignment(Qt.AlignCenter)
+        self.table.blockSignals(True)
+        self.table.setItem(row, 6, adjusted_item)
+        self.table.blockSignals(False)
+
+    def _set_adjusted(self, row: int, value: bool) -> None:
+        """設定已調整狀態，保留為純文字顯示"""
+        if row < 0 or row >= self.table.rowCount():
+            return
+        text = "✓" if value else ""
+        adjusted_item = QTableWidgetItem(text)
+        adjusted_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        adjusted_item.setTextAlignment(Qt.AlignCenter)
+        self.table.blockSignals(True)
+        self.table.setItem(row, 6, adjusted_item)
+        self.table.blockSignals(False)
 
     def _on_import(self) -> None:
         """從文字匯入區間（容錯：以核心 parse_hms 驗證）"""
@@ -433,12 +478,14 @@ class RangeTableWidget(QWidget):
             end_item = self.table.item(row, 3)
             note_item = self.table.item(row, 4)
             precise_item = self.table.item(row, 5)
+            adjusted_item = self.table.item(row, 6)
             if start_item and end_item:
                 title = title_item.text().strip() if title_item else ""
                 start = start_item.text().strip()
                 end = end_item.text().strip()
                 note = note_item.text().strip() if note_item else ""
                 precise = precise_item.checkState() == Qt.Checked if precise_item else False
+                adjusted = bool(adjusted_item.text().strip()) if adjusted_item else False
                 if start and end:
                     ranges.append(
                         {
@@ -447,6 +494,7 @@ class RangeTableWidget(QWidget):
                             "end": end,
                             "note": note,
                             "precise": precise,
+                            "adjusted": adjusted,
                         }
                     )
         return ranges
@@ -460,6 +508,7 @@ class RangeTableWidget(QWidget):
         end_item = self.table.item(row, 3)
         note_item = self.table.item(row, 4)
         precise_item = self.table.item(row, 5)
+        adjusted_item = self.table.item(row, 6)
         if not start_item or not end_item:
             return None
         title = title_item.text().strip() if title_item else ""
@@ -467,9 +516,10 @@ class RangeTableWidget(QWidget):
         end = end_item.text().strip()
         note = note_item.text().strip() if note_item else ""
         precise = precise_item.checkState() == Qt.Checked if precise_item else False
+        adjusted = bool(adjusted_item.text().strip()) if adjusted_item else False
         if not start or not end:
             return None
-        return {"title": title, "start": start, "end": end, "note": note, "precise": precise}
+        return {"title": title, "start": start, "end": end, "note": note, "precise": precise, "adjusted": adjusted}
 
     def set_ranges(self, ranges: List[dict]) -> None:
         """設定區間資料（用於載入設定）"""
@@ -481,6 +531,7 @@ class RangeTableWidget(QWidget):
                 r.get("end", ""),
                 r.get("note", ""),
                 r.get("precise", False),
+                r.get("adjusted", False),
             )
 
     def clear(self) -> None:

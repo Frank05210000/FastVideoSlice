@@ -37,6 +37,7 @@ class SliceWorker(QThread):
         subs_overrides: List[str | None] | None = None,
         precise_flags: List[bool] | None = None,
         use_hwaccel: bool = True,
+        adjusted_flags: List[bool] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -50,6 +51,8 @@ class SliceWorker(QThread):
         self.subs_overrides = subs_overrides or []
         self.precise_flags = precise_flags or []
         self.use_hwaccel = use_hwaccel
+        self._hwaccel_config: fvs.HWAccelConfig | None = None
+        self.adjusted_flags = adjusted_flags or []
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -83,6 +86,12 @@ class SliceWorker(QThread):
             ffmpeg_cmd, ffprobe_cmd = fvs.ensure_ffmpeg_exists()
             self.log.emit(f"使用 ffmpeg: {ffmpeg_cmd}")
             self.log.emit(f"使用 ffprobe: {ffprobe_cmd}")
+            if self.use_hwaccel:
+                self._hwaccel_config = fvs.detect_hwaccel(ffmpeg_cmd)
+                if self._hwaccel_config:
+                    self.log.emit(f"硬體編碼: {self._hwaccel_config.name}")
+                else:
+                    self.log.emit("硬體編碼不可用，改用 CPU")
 
             # 讀取字幕
             self.log.emit("讀取字幕檔...")
@@ -146,7 +155,7 @@ class SliceWorker(QThread):
                     else self.ranges[idx - 1].get("precise", False)
                 )
                 if use_precise and self.verbose:
-                    mode = "硬體加速" if self.use_hwaccel else "CPU"
+                    mode = f"硬體加速({self._hwaccel_config.name})" if (self.use_hwaccel and self._hwaccel_config) else "CPU"
                     self.log.emit(f"  使用精準輸出（重編碼，{mode}）")
                 if use_precise:
                     fvs.run_ffmpeg_precise(
@@ -155,7 +164,7 @@ class SliceWorker(QThread):
                         video_out,
                         self.verbose,
                         ffmpeg_cmd,
-                        use_hwaccel=self.use_hwaccel,
+                        hwaccel_config=self._hwaccel_config if self.use_hwaccel else None,
                     )
                 else:
                     fvs.run_ffmpeg(self.video, rng, video_out, self.verbose, ffmpeg_cmd)
@@ -168,10 +177,14 @@ class SliceWorker(QThread):
                     sliced_cues = fvs.slice_cues(cues, rng)
                     fvs.write_srt(subs_out, sliced_cues)
 
+                # 標記已調整（僅用於 log/後續擴充）
+                adjusted = self.adjusted_flags[idx - 1] if idx - 1 < len(self.adjusted_flags) else False
+
                 output_files.append(str(video_out))
                 output_files.append(str(subs_out))
 
-                self.log.emit(f"  ✓ 已產生 {video_out.name}, {subs_out.name}")
+                suffix = "（已調整）" if adjusted or override_text else ""
+                self.log.emit(f"  ✓ 已產生 {video_out.name}, {subs_out.name} {suffix}")
 
             self.log.emit(f"\n完成！共處理 {total} 個區間")
             self.finished_ok.emit(output_files)

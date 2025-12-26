@@ -59,7 +59,9 @@ class PreviewDialog(QDialog):
         self._subs_dirty = False
         self._busy = False
         self._proc: QProcess | None = None
+        self._hwaccel_config: fvs.HWAccelConfig | None = None
         self._sliced_cues: list[fvs.SRTCue] = []
+        self._suppress_errors = False
         self._sliced_cues = []
 
         self.temp_dir = Path(tempfile.gettempdir()) / "fastvideoslice_preview"
@@ -219,6 +221,8 @@ class PreviewDialog(QDialog):
                 self._ffmpeg_cmd = ffmpeg_cmd
             if self._cues is None:
                 self._cues = fvs.read_srt(self.subs_path)
+            if self._hwaccel_config is None and self.hwaccel_cb.isChecked():
+                self._hwaccel_config = fvs.detect_hwaccel(self._ffmpeg_cmd)
 
             rng = fvs.TimeRange(
                 start=start_sec,
@@ -299,14 +303,13 @@ class PreviewDialog(QDialog):
 
     def _build_ffmpeg_cmd(self, rng: fvs.TimeRange) -> list[str]:
         if self.precise_cb.isChecked():
-            vcodec = "h264_videotoolbox" if self.hwaccel_cb.isChecked() else "libx264"
-            vopts = (
-                ["-b:v", "8M", "-pix_fmt", "yuv420p"]
-                if self.hwaccel_cb.isChecked()
-                else ["-preset", "ultrafast", "-crf", "20"]
-            )
+            cfg = self._hwaccel_config if self.hwaccel_cb.isChecked() else None
+            vcodec = cfg.vcodec if cfg else ("h264_videotoolbox" if self.hwaccel_cb.isChecked() else "libx264")
+            vopts = cfg.vopts if cfg else (["-b:v", "8M", "-pix_fmt", "yuv420p"] if self.hwaccel_cb.isChecked() else ["-preset", "ultrafast", "-crf", "20"])
             cmd = [self._ffmpeg_cmd, "-y"]
-            if self.hwaccel_cb.isChecked():
+            if cfg and cfg.hwaccel_args:
+                cmd += cfg.hwaccel_args
+            elif self.hwaccel_cb.isChecked():
                 cmd += ["-hwaccel", "videotoolbox"]
             cmd += [
                 "-i",
@@ -379,14 +382,17 @@ class PreviewDialog(QDialog):
 
                 self.status_label.setText("預覽已更新")
             except Exception as exc:  # pragma: no cover
-                QMessageBox.warning(self, "預覽失敗", f"處理結果時發生錯誤: {exc}")
+                if not self._suppress_errors:
+                    QMessageBox.warning(self, "預覽失敗", f"處理結果時發生錯誤: {exc}")
         else:
-            QMessageBox.warning(self, "預覽取消/失敗", "預覽已中斷或失敗")
+            if not self._suppress_errors:
+                QMessageBox.warning(self, "預覽取消/失敗", "預覽已中斷或失敗")
         self._set_busy(False)
         self._cleanup_proc()
 
     def _on_proc_error(self, error) -> None:
-        QMessageBox.warning(self, "預覽失敗", f"ffmpeg 執行失敗: {error}")
+        if not self._suppress_errors:
+            QMessageBox.warning(self, "預覽失敗", f"ffmpeg 執行失敗: {error}")
         self._set_busy(False)
         self._cleanup_proc()
 
@@ -418,10 +424,12 @@ class PreviewDialog(QDialog):
 
     def closeEvent(self, event) -> None:
         if self._proc:
-            self._proc.kill()
-            self._proc.waitForFinished(2000)
-            self._proc.deleteLater()
+            self._suppress_errors = True
+            proc = self._proc
             self._proc = None
+            proc.kill()
+            proc.waitForFinished(2000)
+            proc.deleteLater()
         self.player.stop()
         try:
             if self.preview_path.exists():

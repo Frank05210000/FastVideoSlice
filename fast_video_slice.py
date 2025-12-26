@@ -17,9 +17,18 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
+from functools import lru_cache
 
 # 預設用於解讀小數部分為「影格」的 fps；例如 00:00:01.15 在 30fps 下代表第 15 格。
 DEFAULT_FPS = 30
+
+
+@dataclass
+class HWAccelConfig:
+    name: str  # e.g., "videotoolbox" / "nvenc"
+    vcodec: str
+    hwaccel_args: list[str]
+    vopts: list[str]
 
 
 @dataclass
@@ -257,6 +266,52 @@ def ensure_ffmpeg_exists() -> tuple[str, str]:
     return ffmpeg_path, ffprobe_path
 
 
+def _has_encoder(ffmpeg_cmd: str, encoder: str) -> bool:
+    try:
+        result = subprocess.run(
+            [ffmpeg_cmd, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=clean_subprocess_env(),
+        )
+        return encoder in result.stdout
+    except Exception:
+        return False
+
+
+@lru_cache(maxsize=1)
+def detect_hwaccel(ffmpeg_cmd: str) -> HWAccelConfig | None:
+    """
+    嘗試偵測可用的硬體編碼：
+    - macOS：VideoToolbox
+    - Windows/Linux：優先 nvenc
+    回傳 HWAccelConfig，失敗回 None。
+    """
+    platform = sys.platform
+
+    # macOS
+    if platform == "darwin" and _has_encoder(ffmpeg_cmd, "h264_videotoolbox"):
+        return HWAccelConfig(
+            name="videotoolbox",
+            vcodec="h264_videotoolbox",
+            hwaccel_args=["-hwaccel", "videotoolbox"],
+            vopts=["-b:v", "8M", "-pix_fmt", "yuv420p"],
+        )
+
+    # Windows/Linux - NVENC
+    if _has_encoder(ffmpeg_cmd, "h264_nvenc"):
+        return HWAccelConfig(
+            name="nvenc",
+            vcodec="h264_nvenc",
+            hwaccel_args=["-hwaccel", "cuda"],
+            vopts=["-b:v", "8M", "-pix_fmt", "yuv420p"],
+        )
+
+    # TODO: 可再擴充 qsv/vaapi/amf
+    return None
+
+
 def probe_duration(video_path: Path, ffprobe_cmd: str) -> float:
     cmd = [
         ffprobe_cmd,
@@ -324,23 +379,26 @@ def run_ffmpeg_precise(
     output_path: Path,
     verbose: bool,
     ffmpeg_cmd: str,
-    use_hwaccel: bool = False,
+    hwaccel_config: HWAccelConfig | None = None,
     preview_fast: bool = False,
 ) -> None:
     """重編碼模式，較精準對齊時間（預覽/精準輸出用）"""
     if output_path.exists():
         raise UserError(f"輸出檔已存在，避免覆蓋: {output_path}")
     duration = rng.end - rng.start
-    vcodec = "h264_videotoolbox" if use_hwaccel else "libx264"
+    vcodec = hwaccel_config.vcodec if hwaccel_config else ("h264_videotoolbox" if use_hwaccel else "libx264")
     vopts: list[str] = []
-    if use_hwaccel:
+    if hwaccel_config:
+        vopts = hwaccel_config.vopts
+    elif use_hwaccel:
         vopts = ["-b:v", "8M", "-pix_fmt", "yuv420p"]
     else:
         vopts = ["-preset", "ultrafast", "-crf", "20"]
 
     cmd = [ffmpeg_cmd, "-y"]
-    if use_hwaccel:
-        cmd += ["-hwaccel", "videotoolbox"]
+    hwaccel_args = hwaccel_config.hwaccel_args if hwaccel_config else []
+    if hwaccel_args:
+        cmd += hwaccel_args
     cmd += [
         "-i",
         str(video_path),

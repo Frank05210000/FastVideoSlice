@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
         self.settings = SettingsManager()
         self.worker: Optional[SliceWorker] = None
         self.subs_overrides: dict[int, str] = {}
+        self.adjusted_flags: dict[int, bool] = {}
 
         self._build_ui()
         self._load_settings()
@@ -324,6 +325,7 @@ class MainWindow(QMainWindow):
             subs_overrides.append(self.subs_overrides.get(idx))
 
         precise_flags = [r.get("precise", False) for r in ranges]
+        adjusted_flags = [r.get("adjusted", False) for r in ranges]
 
         # 啟動工作執行緒
         self.worker = SliceWorker(
@@ -337,6 +339,7 @@ class MainWindow(QMainWindow):
             subs_overrides=subs_overrides,
             precise_flags=precise_flags,
             use_hwaccel=self.hwaccel_cb.isChecked(),
+            adjusted_flags=adjusted_flags,
         )
         self.worker.progress.connect(self._on_progress)
         self.worker.log.connect(self._on_log)
@@ -419,11 +422,19 @@ class MainWindow(QMainWindow):
         precise_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
         precise_item.setCheckState(Qt.Checked if precise else Qt.Unchecked)
         table.setItem(row, 5, precise_item)
+        # 已調整狀態：若原本已有勾選，或此次有變更，設為 ✓
+        prev_adjusted = self.adjusted_flags.get(row, False)
+        adjusted = True or prev_adjusted
+        adjusted_item = QTableWidgetItem("✓" if adjusted else "")
+        adjusted_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        adjusted_item.setTextAlignment(Qt.AlignCenter)
+        table.setItem(row, 6, adjusted_item)
         # 重置背景色
         table.item(row, 2).setBackground(Qt.white)
         table.item(row, 3).setBackground(Qt.white)
         table.blockSignals(False)
         self.subs_overrides[row] = subs_text
+        self.adjusted_flags[row] = adjusted
         self.range_table.ranges_changed.emit()
 
     def _prune_sub_overrides(self) -> None:
@@ -432,6 +443,9 @@ class MainWindow(QMainWindow):
         stale_keys = [k for k in self.subs_overrides if k > max_row]
         for k in stale_keys:
             self.subs_overrides.pop(k, None)
+        stale_adj = [k for k in self.adjusted_flags if k > max_row]
+        for k in stale_adj:
+            self.adjusted_flags.pop(k, None)
 
     def _load_settings(self) -> None:
         """從設定檔載入上次的設定"""
